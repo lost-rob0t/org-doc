@@ -117,6 +117,13 @@
          (end-of-file ()))
        (nreverse forms)))))
 
+(defun quoted-symbol (x)
+  "Return the symbol of X, unwrapping (QUOTE SYM) when present."
+  (cond ((and (consp x) (eq (first x) 'quote) (symbolp (second x)))
+         (second x))
+        ((symbolp x) x)
+        (t nil)))
+
 (defun harvest-static-docs (file)
   "Collect docstrings for definitions in FILE into *STATIC-DOCS*."
   (let ((forms (read-doc-forms file)))
@@ -167,10 +174,10 @@
                        doc))))
             ((and (eq op 'setf) (consp (second form))
                   (eq (first (second form)) 'documentation))
-             (let* ((target (second (second form)))
-                    (doc-type (third (second form)))
+             (let* ((target (quoted-symbol (second (second form))))
+                    (doc-type (quoted-symbol (third (second form))))
                     (doc (third form)))
-               (when (and (symbolp target) (stringp doc)
+               (when (and target (stringp doc)
                           (member doc-type '(function variable type)))
                  (setf (gethash (symbol-name target) *source-doc-table*)
                        doc))))))))))
