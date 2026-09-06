@@ -1,0 +1,7 @@
+*~
+*.fasl
+.eldept/
+.asdf-cache/
+dist/
+# Local verification state
+.prolog/

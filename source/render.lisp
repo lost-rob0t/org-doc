@@ -1,0 +1,121 @@
+;;;; render.lisp --- render collected entries as Org documents
+(in-package :org-doc)
+
+(defvar *undocumented-marker* "Undocumented."
+  "Text inserted when a symbol has no docstring.")
+
+(defparameter *kind-order*
+  '(:special-variable :constant :symbol-macro
+    :type :class :structure :condition
+    :function :generic-function :macro)
+  "Section order in generated files.")
+
+(defparameter *kind-sections*
+  '((:special-variable . "Variables and Constants")
+    (:constant . "Variables and Constants")
+    (:symbol-macro . "Variables and Constants")
+    (:type . "Types and Classes")
+    (:class . "Types and Classes")
+    (:structure . "Types and Classes")
+    (:condition . "Conditions")
+    (:function . "Functions")
+    (:generic-function . "Generic Functions")
+    (:macro . "Macros"))
+  "Section heading per kind.")
+
+(defun file-slug (package-name)
+  "Filesystem slug for PACKAGE-NAME: dots become dashes, lowercased."
+  (string-downcase (substitute #\- #\. (string package-name))))
+
+(defun entry-file-name (entry)
+  (format nil "~a.org" (file-slug (entry-package entry))))
+
+(defun signature-org (entry)
+  "Render the lambda list of ENTRY as a source block."
+  (let ((ll (entry-lambda-list entry)))
+    (if (and ll (not (equal ll "")))
+        (format nil "#+begin_src common-lisp~%(~a ~a)~%#+end_src~%"
+                (string-downcase (entry-name entry))
+                (prin1-to-string ll))
+        (format nil "#+begin_src common-lisp~%(~a)~%#+end_src~%"
+                (string-downcase (entry-name entry))))))
+
+(defun kind-tag (kind)
+  (case kind
+    ((:function :generic-function) "fn")
+    (:macro "macro")
+    (:class "class")
+    (:condition "condition")
+    (:structure "struct")
+    (:type "type")
+    ((:constant :special-variable :symbol-macro) "var")
+    (t "sym")))
+
+(defun render-entry (entry &key (section-level 3))
+  "Render one ENTRY as org text."
+  (let* ((stars (make-string section-level :initial-element #\*))
+         (doc (or (entry-docstring entry) *undocumented-marker*)))
+    (with-output-to-string (out)
+      (format out "~a ~a~%:PROPERTIES:~%:KIND: ~a~%:PACKAGE: ~a~%:END:~%"
+              stars (string-downcase (entry-name entry))
+              (kind-tag (entry-kind entry))
+              (entry-package entry))
+      (when (entry-lambda-list entry)
+        (write-string (signature-org entry) out))
+      (write-string doc out)
+      (terpri out)
+      (when (and (entry-slots entry) (plusp (length (entry-slots entry))))
+        (format out "- Slots: ~{=~a=~^, ~}~%"
+                (mapcar (lambda (s)
+                          (string-downcase
+                           (let ((n (second s)))
+                             (if (symbolp n) (symbol-name n) (prin1-to-string n)))))
+                        (entry-slots entry)))))))
+
+(defun section-order (kind)
+  (let ((sections (remove-duplicates
+                   (mapcar #'cdr *kind-sections*) :from-end t)))
+    (position (cdr (assoc kind *kind-sections*)) sections :test #'string=)))
+
+(defun render-package (entries package-name &key system-name doc)
+  "Render the org document for one package's ENTRIES."
+  (let* ((sections (remove-duplicates
+                    (mapcar (lambda (k) (cdr (assoc k *kind-sections*)))
+                            (sort (remove-duplicates (mapcar #'entry-kind entries))
+                                  #'< :key #'section-order))
+                    :test #'string=)))
+    (with-output-to-string (out)
+      (format out "#+TITLE: API Reference — ~a~%" package-name)
+      (when system-name
+        (format out "System: =~a=~%" system-name))
+      (format out "#+OPTIONS: toc:2 num:nil~%")
+      (when doc
+        (format out "~a~%" doc))
+      (dolist (section sections)
+        (format out "~%* ~a~%" section)
+        (dolist (kind (sort (remove-duplicates
+                             (mapcar #'entry-kind
+                                     (remove-if-not
+                                      (lambda (e)
+                                        (string= (cdr (assoc (entry-kind e) *kind-sections*))
+                                                 section))
+                                      entries)))
+                            #'< :key #'section-order))
+          (dolist (entry (remove kind entries :test-not #'eql :key #'entry-kind))
+            (write-string (render-entry entry) out)))))))
+
+(defun render-index (package-entries system-name)
+  "Render an index.org.  PACKAGE-ENTRIES is an alist of
+   (PACKAGE-NAME . ENTRIES)."
+  (with-output-to-string (out)
+    (format out "#+TITLE: API Reference — ~a~%" system-name)
+    (format out "#+OPTIONS: toc:nil num:nil~%~%")
+    (format out "* Packages~%")
+    (dolist (pair package-entries)
+      (let ((pkg (car pair))
+            (entries (cdr pair)))
+        (format out "- [[file:~a.org][~a]] — ~a symbol~p~%"
+                (file-slug pkg) pkg (length entries) (length entries))))
+    (format out "~%Generated by =org-doc=.  Docstrings are written in
+Org markup directly in the source; regenerate with
+: org-doc --system ~a~%" system-name)))

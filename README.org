@@ -1,0 +1,113 @@
+#+TITLE: org-doc
+#+AUTHOR: nsaspy
+#+OPTIONS: toc:2 num:nil
+
+Org-mode API documentation from Common Lisp docstrings — plus live docs
+in Emacs (SLY and SLIME) while you type.
+
+#+begin_quote
+Write the documentation *in* the source, as Org.  Render it *out* as Org.
+Never leave your editor.
+#+end_quote
+
+* Why
+
+- Docstrings drift out of sync with hand-written manuals.  org-doc makes
+  the docstring itself the documentation source.
+- Docstrings are written with Org markup: headings, lists, =code=,
+  #+begin_src blocks.  They render natively in org-mode.
+- The rendered API reference lives in ~doc/api/~ as plain Org files:
+  greppable, diffable, and exportable to HTML/PDF/Info with org.
+- Future backends (Python, JavaScript, Prolog, Nim) will feed the same
+  neutral entry records into the same renderer.
+
+* Layout
+
+#+begin_example
+org-doc.asd            three systems: org-doc, org-doc/tests, org-doc/cli
+source/collect.lisp    static package discovery + live docstring extraction
+source/render.lisp     Org renderer (per-package files + index)
+source/generate.lisp   generate / coverage / print-coverage entry points
+source/cli.lisp        flag-based CLI (org-doc --system ...)
+t/                     fixture system + self tests (zero deps)
+elisp/sly-org-doc.el   Emacs package: eldoc summaries + Org describe
+flake.nix              CLI binary, test runner, emacs package, dev shell
+#+end_example
+
+* CLI usage
+
+#+begin_example
+org-doc --system my-system            # writes ./doc/api/*.org + index.org
+org-doc --system my-system --out docs/api
+org-doc --system my-system --packages my-system,my-system.other
+org-doc --system my-system --internal # include unexported symbols
+org-doc --system my-system --no-load  # system already loaded in image
+org-doc --system my-system --quiet
+#+end_example
+
+* Library usage
+
+#+begin_src lisp
+(asdf:load-system :my-system)
+(org-doc:generate :my-system :output-directory #p"doc/api/")
+
+;; how well documented is it?
+(org-doc:print-coverage :my-system)
+;; Package                                Documented/Total
+;; MY-SYSTEM                              34/40
+;; Total undocumented: 6
+;;   MY-SYSTEM::FROB-WIDGETS (function)
+#+end_src
+
+* Docstring convention
+
+Write Org in the docstring.  First non-empty line is the summary used by
+eldoc and the renderer.
+
+#+begin_src lisp
+(defun dispatch-target (target)
+  "Dispatch TARGET to its owning actor.
+
+Rules:
+- leases are honored before dispatch
+- poisoned targets go to the quarantine queue
+
+#+begin_src lisp
+(dispatch-target target) => :ok
+#+end_src"
+  ...)
+#+end_src
+
+* Emacs: sly-org-doc
+
+#+begin_src emacs-lisp
+(require 'sly-org-doc)
+(add-hook 'sly-mode-hook        #'sly-org-doc-eldoc-mode)
+(add-hook 'sly-mrepl-mode-hook  #'sly-org-doc-eldoc-mode)
+(add-hook 'slime-mode-hook      #'sly-org-doc-eldoc-mode)
+#+end_src
+
+- While typing: eldoc shows the arglist (sly-autodoc/slime) *plus* the
+  first line of the Org docstring, markup stripped, fontified.
+- =C-c C-d C-o= :: describe symbol at point in a fontified org buffer.
+- =C-c C-d M-o= :: jump to the docstring in the source.
+
+* Nix
+
+#+begin_example
+nix build .#org-doc-bin      # CLI wrapper
+nix build .#emacsPackage     # sly-org-doc for emacs
+nix run  .#org-doc-tests     # self tests
+nix develop                  # sbcl with org-doc in registry + emacs
+#+end_example
+
+* Roadmap
+
+- [ ] Python backend (ast/pydoc → entry records)
+- [ ] JavaScript backend (tree-sitter/JSDoc → entry records)
+- [ ] Prolog backend (pldoc → entry records)
+- [ ] Nim backend (doc comments → entry records)
+
+* License
+
+GPL-3.0-or-later.
