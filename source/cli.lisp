@@ -22,12 +22,12 @@ Usage: org-doc --system SYSTEM [--out DIR] [--packages P1,P2]~
 
 (defun main ()
   (let* ((argv (argv-all))
-         (system (get-option argv "--system"))
-         (out (or (get-option argv "--out") "doc/api/"))
-         (pkgs (get-option argv "--packages"))
+         (system (or (get-option argv "--system") (uiop:getenv "ORG_DOC_SYSTEM")))
+         (out (or (get-option argv "--out") (uiop:getenv "ORG_DOC_OUT") "doc/api/"))
+         (pkgs (or (get-option argv "--packages") (uiop:getenv "ORG_DOC_PACKAGES")))
          (index (or (get-option argv "--index") "index"))
          (packages (when pkgs (uiop:split-string pkgs :separator ",")))
-         (quiet (has-flag argv "--quiet")))
+         (quiet (or (has-flag argv "--quiet") (uiop:getenv "ORG_DOC_QUIET"))))
     (cond
       ((or (has-flag argv "--help") (has-flag argv "-h") (null system))
        (usage *error-output*)

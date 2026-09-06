@@ -18,7 +18,7 @@
         org-doc-lib = pkgs.sbcl.buildASDFSystem rec {
           pname = "org-doc";
           version = "0.1.0";
-          lispSystems = [ "org-doc" "org-doc/cli" ];
+          lispSystems = [ "org-doc" ];
           src = ./.;
           lispLibs = [ ];
         };

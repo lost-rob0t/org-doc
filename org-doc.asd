@@ -13,7 +13,8 @@
     ((:file "package")
      (:file "collect")
      (:file "render")
-     (:file "generate")))))
+     (:file "generate")
+     (:file "cli")))))
 
 (asdf:defsystem #:org-doc/tests
   :description "Self tests for org-doc."
@@ -23,11 +24,3 @@
     :serial t
     :components
     ((:file "main")))))
-
-(asdf:defsystem #:org-doc/cli
-  :description "Command line entry point for org-doc."
-  :depends-on (#:org-doc)
-  :components
-  ((:module "source"
-    :components
-    ((:file "cli")))))
