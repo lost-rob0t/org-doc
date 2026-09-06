@@ -45,9 +45,9 @@
     (values)))
 
 (defun ensure-directory (path)
-  (let ((path (pathname path)))
-    (ensure-directories-exist path)
-    path))
+  (let ((dir (uiop:ensure-directory-pathname path)))
+    (ensure-directories-exist dir)
+    dir))
 
 (defun generate (system-name
                  &key
