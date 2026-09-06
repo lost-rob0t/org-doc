@@ -11,6 +11,12 @@
       (let ((pkg (find-package name)))
         (when pkg
           (let ((entries (collect-package pkg :external-only external-only)))
+            ;; fill gaps from the static source table
+            (dolist (entry entries)
+              (unless (entry-docstring entry)
+                (setf (entry-docstring entry)
+                      (static-docstring-for
+                       (make-symbol (entry-name entry))))))
             (when entries
               (push (cons (package-name pkg) entries) alist))))))
     (sort alist #'string< :key #'car)))
@@ -66,6 +72,9 @@
    Returns the output directory."
   (when load-system
     (asdf:load-system system-name :verbose nil))
+  ;; Source docstrings outrank whatever the image retained: harvest them
+  ;; statically and prefer them over (possibly missing) runtime docs.
+  (harvest-system-docs system-name)
   (let* ((alist (package-entries-for-system system-name
                                             :packages packages
                                             :external-only external-only))

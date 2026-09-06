@@ -84,6 +84,107 @@
     ((:constant :special-variable)
      (documentation symbol 'variable))))
 
+;;;; Static source fallback
+;;;
+;;; Some implementations drop defun docstrings for functions whose lambda
+;;; lists contain function constants (e.g. #:*default-arg* #'function).
+;;; Since the source is the documentation source of truth, we can always
+;;; read docstrings straight out of the files.
+
+(defvar *source-doc-table* (make-hash-table :test 'equal)
+  "name (string, lowercased) -> docstring, harvested from source files.")
+
+(defun string-docstring (string)
+  (when (and string (plusp (length string))) string))
+
+(defun read-doc-forms (file)
+  "Read top-level forms of FILE honoring in-package, returning them plus
+   any errors ignored.  Returns a list of forms (best effort)."
+  (ignore-errors
+   (with-open-file (in file)
+     (let* ((*read-eval* nil)
+            (forms '()))
+       (handler-case
+           (loop for form = (read in nil nil)
+                 while form
+                 do (push form forms)
+                    (when (and (consp form)
+                               (eq (first form) 'in-package)
+                               (symbolp (second form)))
+                      (let ((pkg (find-package (second form))))
+                        (when pkg
+                          (setf *package* pkg)))))
+         (end-of-file ()))
+       (nreverse forms)))))
+
+(defun harvest-static-docs (file)
+  "Collect docstrings for definitions in FILE into *STATIC-DOCS*."
+  (let ((forms (read-doc-forms file)))
+    (dolist (form forms)
+      (when (consp form)
+        (let ((op (first form)))
+          (cond
+            ((and (member op '(defun defmacro))
+                  (symbolp (second form)))
+             (let ((doc (third form)))
+               (when (and (stringp doc)
+                          (not (keywordp doc)))
+                 (setf (gethash (symbol-name (second form)) *source-doc-table*)
+                       doc))))
+            ((and (eq op 'defgeneric) (symbolp (second form)))
+             (dolist (opt (cdddr form))
+               (when (and (consp opt) (eq (first opt) :documentation)
+                          (stringp (second opt)))
+                 (setf (gethash (symbol-name (second form)) *source-doc-table*)
+                       (second opt)))))
+            ((and (member op '(defvar defparameter defconstant))
+                  (symbolp (second form)))
+             (let ((doc (or (fourth form) (third form))))
+               (when (stringp doc)
+                 (setf (gethash (symbol-name (second form)) *source-doc-table*)
+                       doc))))
+            ((and (member op '(defclass define-condition))
+                  (symbolp (second form)))
+             (dolist (opt (cdddr form))
+               (when (and (consp opt) (eq (first opt) :documentation)
+                          (stringp (second opt)))
+                 (setf (gethash (symbol-name (second form)) *source-doc-table*)
+                       (second opt)))))
+            ((eq op 'defstruct)
+             ;; docstring may follow the name or the (name options...) list
+             (let* ((rest (cdr form))
+                    (first (first rest))
+                    (name (cond ((symbolp first) first)
+                                ((consp first) (first first))))
+                    (doc (cond
+                           ((and (consp first) (stringp (second rest)))
+                            (second rest))
+                           ((and (symbolp first) (stringp (second rest)))
+                            (second rest))
+                           ((stringp first) first))))
+               (when (and name doc)
+                 (setf (gethash (symbol-name name) *source-doc-table*)
+                       doc))))
+            ((and (eq op 'setf) (consp (second form))
+                  (eq (first (second form)) 'documentation))
+             (let* ((target (second (second form)))
+                    (doc-type (third (second form)))
+                    (doc (third form)))
+               (when (and (symbolp target) (stringp doc)
+                          (member doc-type '(function variable type)))
+                 (setf (gethash (symbol-name target) *source-doc-table*)
+                       doc))))))))))
+
+(defun harvest-system-docs (system-name)
+  "Harvest docstrings from every source file of SYSTEM-NAME into
+   *STATIC-DOCS*.  Safe to call repeatedly; results accumulate."
+  (dolist (file (system-source-files system-name))
+    (harvest-static-docs file))
+  (hash-table-count *source-doc-table*))
+
+(defun static-docstring-for (symbol)
+  (gethash (symbol-name symbol) *source-doc-table*))
+
 (defun collect-package (package-designator &key (external-only t))
   "Extract documentation entries for every documentable symbol exported
    from PACKAGE-DESIGNATOR."
