@@ -24,6 +24,7 @@
 (defun coverage (system-name &key packages)
   "Return a coverage report plist for SYSTEM-NAME:
    (:packages N :symbols N :documented N :undocumented (SYM...))."
+  (harvest-system-docs system-name)
   (let* ((alist (package-entries-for-system system-name :packages packages))
          (all (apply #'append (mapcar #'cdr alist)))
          (undocumented (remove-if #'entry-docstring all)))
