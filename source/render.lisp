@@ -31,13 +31,15 @@
   (format nil "~a.org" (file-slug (entry-package entry))))
 
 (defun signature-org (entry)
-  "Render the lambda list of ENTRY as a source block."
+  "Render the lambda list of ENTRY as a source block.
+
+Org babel names the Common Lisp language =lisp=."
   (let ((ll (entry-lambda-list entry)))
     (if (and ll (not (equal ll "")))
-        (format nil "#+begin_src common-lisp~%(~a ~a)~%#+end_src~%"
+        (format nil "#+begin_src lisp~%(~a ~a)~%#+end_src~%"
                 (string-downcase (entry-name entry))
                 (prin1-to-string ll))
-        (format nil "#+begin_src common-lisp~%(~a)~%#+end_src~%"
+        (format nil "#+begin_src lisp~%(~a)~%#+end_src~%"
                 (string-downcase (entry-name entry))))))
 
 (defun kind-tag (kind)
